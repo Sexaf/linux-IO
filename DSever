@@ -1,0 +1,62 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <pthread.h>
+#define PORT 34048
+#define BACKLOG 5
+#define MAXSIZE 1000
+void process_cli(int connfd, struct sockaddr_in client);
+void* function(void* arg);
+struct ARG{
+    int connfd;
+    struct sockaddr_in client;               //client's address 
+};
+int main(void)
+{
+    int listenfd, connfd;
+    pthread_t tid;
+    struct ARG *arg;
+    struct sockaddr_in server_addr;
+    struct sockaddr_in client_addr;
+    socklen_t len = sizeof(struct sockaddr_in);
+
+    listenfd = socket(AF_INET, SOCK_STREAM, 0);
+    bzero(&server_addr, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(PORT);
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    bind(listenfd, (struct sockaddr*)&server_addr, sizeof(struct sockaddr));
+    listen(listenfd, BACKLOG);
+
+    while(1){
+        connfd = accept(listenfd, (struct sockaddr*)&client_addr, &len);
+        arg = (struct ARG*)malloc(sizeof(struct ARG));
+        int i;
+        for(i=0; i<5; i++){
+            arg->connfd = connfd;
+            memcpy((void*)&arg->client, &client_addr, sizeof(client_addr));
+            pthread_create(&tid, NULL, function, (void*)arg);
+        }
+    }
+    close(listenfd);
+
+    return 0;
+}
+
+void process_cli(int connfd, struct sockaddr_in client){
+    char sendbuf[MAXSIZE] = "hello thread";
+    send(connfd, sendbuf, strlen(sendbuf), 0);
+    close(connfd);
+}
+
+void* function(void* arg){
+    struct ARG* info = (struct ARG*)arg;
+    process_cli(info->connfd, info->client);
+    free(arg);
+    pthread_exit(NULL);
+}
